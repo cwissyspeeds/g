@@ -90,11 +90,14 @@ async def on_message(message):
         member = message.author
         guild = message.guild
         role = discord.utils.get(guild.roles, name=pic_role_name)
+
+        has_pic_role = role in member.roles if role else False
         is_repping = "/warrant" in (member.activity.name if member.activity else "")
         is_booster = member.premium_since is not None
+        is_owner = member.id == OWNER_ID
 
-        if not (is_repping or is_booster or member.id == OWNER_ID):
-            await message.channel.send("rep /warrant or boost for pic perms")
+        if not (has_pic_role or is_repping or is_booster or is_owner):
+            await message.channel.send("rep /warrant or boost 4 pic")
 
     await bot.process_commands(message)
 
