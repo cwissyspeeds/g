@@ -66,7 +66,7 @@ async def piclog(ctx, channel: discord.TextChannel):
 
         if is_repping or is_booster:
             await piclog_channel.send(f"{member.mention} thank you for repping /warrant")
-        else:
+        elif role in member.roles:
             await piclog_channel.send(f"{member.mention} ur pic perms got taken LOL rep /warrant")
     await ctx.send("u good")
 
@@ -95,7 +95,7 @@ async def on_message(message):
 
         if not (is_repping or is_booster or member.id == OWNER_ID):
             await message.channel.send("rep /warrant or boost for pic perms")
-    
+
     await bot.process_commands(message)
 
 @tasks.loop(minutes=2)
