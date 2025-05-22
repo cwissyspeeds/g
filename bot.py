@@ -4,14 +4,19 @@ import os
 
 TOKEN = os.environ.get("TOKEN")
 
-intents = discord.Intents.all()
-bot = commands.Bot(command_prefix=',', intents=intents)
-
 OWNER_ID = 1349548232899821679
 ALLOWED_GUILD = 1372379463727186022
 pic_role_name = "pic"
 permitted_users = {OWNER_ID}
 piclog_channel = None
+
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+intents.presences = True
+intents.guilds = True
+
+bot = commands.Bot(command_prefix=',', intents=intents)
 
 @bot.event
 async def on_ready():
@@ -63,10 +68,11 @@ async def piclog(ctx, channel: discord.TextChannel):
     for member in ctx.guild.members:
         is_repping = "/warrant" in (member.activity.name if member.activity else "")
         is_booster = member.premium_since is not None
+        has_pic = role in member.roles
 
         if is_repping or is_booster:
             await piclog_channel.send(f"{member.mention} thank you for repping /warrant")
-        elif role in member.roles:
+        elif has_pic:
             await piclog_channel.send(f"{member.mention} ur pic perms got taken LOL rep /warrant")
     await ctx.send("u good")
 
