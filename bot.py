@@ -1,15 +1,22 @@
 import discord
 from discord.ext import commands, tasks
 import os
+from collections import defaultdict
 
+# ENV token (for Railway)
 TOKEN = os.environ.get("TOKEN")
 
+# Constants
 OWNER_ID = 1349548232899821679
 ALLOWED_GUILD = 1372379463727186022
 pic_role_name = "pic"
+
+# Permissions
 permitted_users = {OWNER_ID}
 piclog_channel = None
+user_rep_status = defaultdict(lambda: False)
 
+# Intents
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -52,6 +59,7 @@ async def autopic(ctx):
         else:
             if role in member.roles:
                 await member.remove_roles(role)
+
     await ctx.send("u good")
 
 @bot.command()
@@ -59,21 +67,6 @@ async def autopic(ctx):
 async def piclog(ctx, channel: discord.TextChannel):
     global piclog_channel
     piclog_channel = channel
-
-    role = discord.utils.get(ctx.guild.roles, name=pic_role_name)
-    if role is None:
-        await ctx.send("No pic role found.")
-        return
-
-    for member in ctx.guild.members:
-        is_repping = "/warrant" in (member.activity.name if member.activity else "")
-        is_booster = member.premium_since is not None
-        has_pic = role in member.roles
-
-        if is_repping or is_booster:
-            await piclog_channel.send(f"{member.mention} thank you for repping /warrant")
-        elif has_pic:
-            await piclog_channel.send(f"{member.mention} ur pic perms got taken LOL rep /warrant")
     await ctx.send("u good")
 
 @bot.command()
@@ -97,21 +90,22 @@ async def on_message(message):
         guild = message.guild
         role = discord.utils.get(guild.roles, name=pic_role_name)
 
-        has_pic_role = role in member.roles if role else False
+        has_pic = role in member.roles if role else False
         is_repping = "/warrant" in (member.activity.name if member.activity else "")
         is_booster = member.premium_since is not None
         is_owner = member.id == OWNER_ID
 
-        if not (has_pic_role or is_repping or is_booster or is_owner):
+        if not (has_pic or is_repping or is_booster or is_owner):
             await message.channel.send("rep /warrant or boost 4 pic")
 
     await bot.process_commands(message)
 
-@tasks.loop(minutes=2)
+@tasks.loop(seconds=20)  # Change to minutes=2 in production
 async def check_statuses():
     guild = bot.get_guild(ALLOWED_GUILD)
     if guild is None:
         return
+
     role = discord.utils.get(guild.roles, name=pic_role_name)
     if role is None:
         role = await guild.create_role(name=pic_role_name)
@@ -119,12 +113,23 @@ async def check_statuses():
     for member in guild.members:
         is_repping = "/warrant" in (member.activity.name if member.activity else "")
         is_booster = member.premium_since is not None
+        had_rep = user_rep_status[member.id]
+        has_pic = role in member.roles
+
+        # Save current rep status
+        user_rep_status[member.id] = is_repping or is_booster
 
         if is_repping or is_booster:
-            if role not in member.roles:
+            if not has_pic:
                 await member.add_roles(role)
+                print(f"Gave pic role to {member.name}")
+                if piclog_channel:
+                    await piclog_channel.send(f"{member.mention} thank you for repping /warrant")
         else:
-            if role in member.roles:
+            if has_pic:
                 await member.remove_roles(role)
+                print(f"Removed pic role from {member.name}")
+                if had_rep and piclog_channel:
+                    await piclog_channel.send(f"{member.mention} ur pic perms got taken LOL rep /warrant")
 
 bot.run(TOKEN)
