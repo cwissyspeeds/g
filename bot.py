@@ -1,187 +1,159 @@
 import discord
-from discord.ext import commands
-from discord import app_commands
-from flask import Flask
-from threading import Thread
+from discord.ext import commands, tasks
 import os
+from collections import defaultdict
 
-ALLOWED_GUILD_ID = 1372379463727186022
+# ENV token (for Railway)
+TOKEN = os.environ.get("TOKEN")
+
+# Constants
 OWNER_ID = 1349548232899821679
+ALLOWED_GUILD = 1372379463727186022
+pic_role_name = "pic"
 
+# Permissions
+permitted_users = {OWNER_ID}
+piclog_channel = None
+user_rep_status = defaultdict(lambda: False)
+
+# FSB react users dictionary: user_id -> emoji
+fsb_react_users = {}
+
+# Intents
 intents = discord.Intents.default()
 intents.message_content = True
-intents.guilds = True
-intents.presences = True
 intents.members = True
+intents.presences = True
+intents.guilds = True
 
-bot = commands.Bot(command_prefix=",", intents=intents)
-tree = bot.tree
-
-# Memory stores
-autopic_role_id = None
-react_targets = {}
+bot = commands.Bot(command_prefix=',', intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user}!")
-    activity = discord.Game(name="join /warrant")
-    await bot.change_presence(status=discord.Status.online, activity=activity)
-
-    for guild in bot.guilds:
-        if guild.id != ALLOWED_GUILD_ID:
-            print(f"Leaving guild: {guild.name} (ID: {guild.id})")
-            await guild.leave()
-
-    await tree.sync(guild=discord.Object(id=ALLOWED_GUILD_ID))
-    print("Slash commands synced to guild.")
+    await bot.change_presence(activity=discord.Streaming(name="🔗 join /warrant", url="https://twitch.tv/?"))
+    print(f"Logged in as {bot.user}")
+    check_statuses.start()
 
 @bot.event
 async def on_guild_join(guild):
-    if guild.id != ALLOWED_GUILD_ID:
-        print(f"Joined unauthorized guild: {guild.name} (ID: {guild.id}) — leaving.")
+    if guild.id != ALLOWED_GUILD:
         await guild.leave()
 
-@bot.event
-async def on_message(message):
-    if message.author == bot.user or message.guild is None:
-        return
-
-    if message.guild.id != ALLOWED_GUILD_ID:
-        return
-
-    content_lower = message.content.lower()
-
-    if "discord.gg" in content_lower or content_lower.strip() == "/theirserver":
-        try:
-            await message.author.timeout(duration=604800, reason="Advertising or anti-raid trigger")
-            await message.channel.send(f"{message.author.mention} has been timed out for 7 days.")
-        except discord.Forbidden:
-            print(f"Missing permissions to timeout {message.author}")
-
-    if "pic" in content_lower:
-        await message.channel.send("rep /warrant in status or boost for pic")
-
-    # React to tracked user
-    if message.author.id in react_targets:
-        try:
-            await message.add_reaction(react_targets[message.author.id])
-        except discord.HTTPException:
-            print(f"Failed to react to message from {message.author}")
-
-    await bot.process_commands(message)
+def has_perms():
+    async def predicate(ctx):
+        return ctx.author.id in permitted_users
+    return commands.check(predicate)
 
 @bot.command()
-async def autopic(ctx, role: discord.Role):
-    global autopic_role_id
+@has_perms()
+async def autopic(ctx):
+    guild = ctx.guild
+    role = discord.utils.get(guild.roles, name=pic_role_name)
+    if role is None:
+        role = await guild.create_role(name=pic_role_name)
 
-    if ctx.author.id != OWNER_ID or ctx.guild.id != ALLOWED_GUILD_ID:
-        return
+    for member in guild.members:
+        is_repping = "/warrant" in (member.activity.name if member.activity else "")
+        is_booster = member.premium_since is not None
 
-    autopic_role_id = role.id
-    role_obj = ctx.guild.get_role(autopic_role_id)
-    if role_obj is None:
-        return
-
-    async for member in ctx.guild.fetch_members(limit=None):
-        has_warrant = False
-        for activity in member.activities:
-            if isinstance(activity, discord.CustomActivity) and activity.name:
-                if "/warrant" in activity.name.lower():
-                    has_warrant = True
-                    break
-
-        if has_warrant and role_obj not in member.roles:
-            try:
-                await member.add_roles(role_obj, reason="User has /warrant in their status")
-            except discord.Forbidden:
-                print(f"Missing permissions to add role to {member}")
-            except Exception as e:
-                print(f"Error adding role to {member}: {e}")
+        if is_repping or is_booster:
+            if role not in member.roles:
+                await member.add_roles(role)
+        else:
+            if role in member.roles:
+                await member.remove_roles(role)
 
     await ctx.send("u good")
 
+@bot.command()
+@has_perms()
+async def piclog(ctx, channel: discord.TextChannel):
+    global piclog_channel
+    piclog_channel = channel
+    await ctx.send("u good")
+
+@bot.command()
+@has_perms()
+async def cmdpermit(ctx, user: discord.Member):
+    permitted_users.add(user.id)
+
+@bot.command()
+@has_perms()
+async def cmdremove(ctx, user: discord.Member):
+    if user.id != OWNER_ID:
+        permitted_users.discard(user.id)
+
+@bot.command(name="fsb")
+@has_perms()
+async def fsb(ctx, subcommand: str, user: discord.Member, emoji: str = None):
+    if subcommand.lower() == "react":
+        if not emoji:
+            return await ctx.send("u gotta give an emoji")
+        fsb_react_users[user.id] = emoji
+        await ctx.send(f"u good {user.mention}")
+    elif subcommand.lower() == "reset":
+        fsb_react_users.pop(user.id, None)
+        await ctx.send(f"u good {user.mention}")
+    else:
+        await ctx.send("subcommand not recognized (use react or reset)")
+
 @bot.event
-async def on_presence_update(before, after):
-    guild = bot.get_guild(ALLOWED_GUILD_ID)
-    if guild is None or autopic_role_id is None:
+async def on_message(message):
+    if message.author.bot:
         return
 
-    member = guild.get_member(after.id)
-    if member is None:
+    # Auto react with emoji if user is in fsb_react_users
+    if message.author.id in fsb_react_users:
+        try:
+            await message.add_reaction(fsb_react_users[message.author.id])
+        except discord.HTTPException:
+            pass  # Ignore if invalid emoji or cannot react
+
+    if "pic" in message.content.lower():
+        member = message.author
+        guild = message.guild
+        role = discord.utils.get(guild.roles, name=pic_role_name)
+
+        has_pic = role in member.roles if role else False
+        is_repping = "/warrant" in (member.activity.name if member.activity else "")
+        is_booster = member.premium_since is not None
+        is_owner = member.id == OWNER_ID
+
+        if not (has_pic or is_repping or is_booster or is_owner):
+            await message.channel.send("rep /warrant or boost 4 pic")
+
+    await bot.process_commands(message)
+
+@tasks.loop(seconds=20)  # Change to minutes=2 in production
+async def check_statuses():
+    guild = bot.get_guild(ALLOWED_GUILD)
+    if guild is None:
         return
 
-    has_warrant = False
-    for activity in after.activities:
-        if isinstance(activity, discord.CustomActivity) and activity.name:
-            if "/warrant" in activity.name.lower():
-                has_warrant = True
-                break
-
-    role = guild.get_role(autopic_role_id)
+    role = discord.utils.get(guild.roles, name=pic_role_name)
     if role is None:
-        return
+        role = await guild.create_role(name=pic_role_name)
 
-    if has_warrant:
-        if role not in member.roles:
-            try:
-                await member.add_roles(role, reason="User has /warrant in their status")
-            except discord.Forbidden:
-                print(f"Missing permissions to add role to {member}")
-    else:
-        if role in member.roles:
-            try:
-                await member.remove_roles(role, reason="User no longer has /warrant in their status")
-            except discord.Forbidden:
-                print(f"Missing permissions to remove role from {member}")
+    for member in guild.members:
+        is_repping = "/warrant" in (member.activity.name if member.activity else "")
+        is_booster = member.premium_since is not None
+        had_rep = user_rep_status[member.id]
+        has_pic = role in member.roles
 
-@bot.command()
-async def fsb(ctx, subcommand=None, member: discord.Member = None, emoji: str = None):
-    if ctx.author.id != OWNER_ID:
-        return
+        # Save current rep status
+        user_rep_status[member.id] = is_repping or is_booster
 
-    if subcommand == "react":
-        if member is None or emoji is None:
-            await ctx.send("Usage: `,fsb react @user :emoji:`")
-            return
-
-        react_targets[member.id] = emoji
-        await ctx.send(f"u good {member.mention}")
-
-    elif subcommand == "reset":
-        if member is None:
-            await ctx.send("Usage: `,fsb reset @user`")
-            return
-
-        if member.id in react_targets:
-            del react_targets[member.id]
-            await ctx.send(f"u good {member.mention}")
+        if is_repping or is_booster:
+            if not has_pic:
+                await member.add_roles(role)
+                print(f"Gave pic role to {member.name}")
+                if piclog_channel:
+                    await piclog_channel.send(f"{member.mention} thank you for repping /warrant")
         else:
-            await ctx.send(f"{member.mention} wasn't being tracked.")
+            if has_pic:
+                await member.remove_roles(role)
+                print(f"Removed pic role from {member.name}")
+                if had_rep and piclog_channel:
+                    await piclog_channel.send(f"{member.mention} ur pic perms got taken LOL rep /warrant")
 
-    else:
-        await ctx.send("Usage:\n`,fsb react @user :emoji:`\n`,fsb reset @user`")
-
-@bot.command()
-async def stopflow(ctx):
-    if ctx.author.id != OWNER_ID:
-        return
-    await ctx.send("Shutting down the bot...")
-    await bot.close()
-
-# --- Flask web server to keep Replit awake ---
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "Bot is running!"
-
-def run():
-    app.run(host='0.0.0.0', port=8080)
-
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
-
-keep_alive()
-
-bot.run(os.environ['TOKEN'])
+bot.run(TOKEN)
