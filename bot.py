@@ -4,7 +4,7 @@ import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-# ENV token (for Railway)
+# ENV token
 TOKEN = os.environ.get("TOKEN")
 
 # Constants
@@ -70,7 +70,6 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # Auto-reaction
     if message.author.id in fsb_react_users:
         try:
             await message.add_reaction(fsb_react_users[message.author.id])
@@ -100,7 +99,6 @@ async def on_voice_state_update(member, before, after):
 
     now = datetime.utcnow()
 
-    # Leaving VC
     if before.channel and not after.channel:
         join_time = last_voice_states.get(member.id)
         if join_time:
@@ -108,7 +106,6 @@ async def on_voice_state_update(member, before, after):
             vc_times[member.id] += seconds
             last_voice_states.pop(member.id, None)
 
-    # Joining VC
     elif not before.channel and after.channel:
         last_voice_states[member.id] = now
 
@@ -243,6 +240,10 @@ async def active(ctx, sub: str, duration: str = None):
         active_race = False
         await ctx.send("race ended early")
 
+@bot.command()
+async def ping(ctx):
+    await ctx.send("u good vro")
+
 # --- Background Tasks ---
 
 @tasks.loop(seconds=15)
@@ -257,7 +258,6 @@ async def update_race_leaderboard():
         active_race = False
         return
 
-    # Update time for users currently in VC
     now = datetime.utcnow()
     for uid, join_time in last_voice_states.items():
         vc_times[uid] += int((now - join_time).total_seconds())
