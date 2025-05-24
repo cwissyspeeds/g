@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands, tasks
 import os
 from collections import defaultdict
+from datetime import datetime, timedelta
 
 # ENV token (for Railway)
 TOKEN = os.environ.get("TOKEN")
@@ -18,25 +19,100 @@ piclog_channel = None
 user_rep_status = defaultdict(lambda: False)
 fsb_react_users = {}
 
+# VC Race
+vc_times = defaultdict(int)
+active_race = False
+race_end_time = None
+race_leaderboard_message = None
+race_channel = None
+last_voice_states = {}
+
 # Intents
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.presences = True
 intents.guilds = True
+intents.voice_states = True
 
 bot = commands.Bot(command_prefix=',', intents=intents)
+
+# --- Helper Functions ---
+
+def parse_time_string(time_str):
+    units = {'d': 'days', 'h': 'hours', 'm': 'minutes', 's': 'seconds'}
+    kwargs = {}
+    num = ''
+    for char in time_str:
+        if char.isdigit():
+            num += char
+        elif char in units and num:
+            kwargs[units[char]] = int(num)
+            num = ''
+    return timedelta(**kwargs)
+
+# --- Events ---
 
 @bot.event
 async def on_ready():
     await bot.change_presence(activity=discord.Streaming(name="🔗 join /warrant", url="https://twitch.tv/?"))
     print(f"Logged in as {bot.user}")
     check_statuses.start()
+    update_race_leaderboard.start()
 
 @bot.event
 async def on_guild_join(guild):
     if guild.id not in {ALLOWED_GUILD, *OTHER_ALLOWED_GUILDS}:
         await guild.leave()
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    # Auto-reaction
+    if message.author.id in fsb_react_users:
+        try:
+            await message.add_reaction(fsb_react_users[message.author.id])
+        except discord.HTTPException:
+            pass
+
+    if "pic" in message.content.lower():
+        member = message.author
+        guild = message.guild
+        role = discord.utils.get(guild.roles, name=pic_role_name)
+
+        has_pic = role in member.roles if role else False
+        is_repping = "/warrant" in (member.activity.name if member.activity else "")
+        is_booster = member.premium_since is not None
+        is_owner = member.id == OWNER_ID
+
+        if not (has_pic or is_repping or is_booster or is_owner):
+            await message.channel.send("rep /warrant or boost 4 pic")
+
+    await bot.process_commands(message)
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    global last_voice_states
+    if not active_race:
+        return
+
+    now = datetime.utcnow()
+
+    # Leaving VC
+    if before.channel and not after.channel:
+        join_time = last_voice_states.get(member.id)
+        if join_time:
+            seconds = int((now - join_time).total_seconds())
+            vc_times[member.id] += seconds
+            last_voice_states.pop(member.id, None)
+
+    # Joining VC
+    elif not before.channel and after.channel:
+        last_voice_states[member.id] = now
+
+# --- Commands ---
 
 def has_perms():
     async def predicate(ctx):
@@ -103,17 +179,11 @@ async def check(ctx):
         return await ctx.send("not in the allowed guild")
 
     primary_guild = bot.get_guild(ALLOWED_GUILD)
-    current_guild = ctx.guild
-
     if not primary_guild:
         return await ctx.send("main guild not found")
 
     primary_ids = {m.id for m in primary_guild.members}
-    users_to_list = []
-
-    for member in current_guild.members:
-        if not member.bot and member.id not in primary_ids:
-            users_to_list.append(member)
+    users_to_list = [m for m in ctx.guild.members if not m.bot and m.id not in primary_ids]
 
     if not users_to_list:
         return await ctx.send("no users to list")
@@ -132,58 +202,82 @@ async def masskick(ctx):
         return await ctx.send("not in the allowed guild")
 
     primary_guild = bot.get_guild(ALLOWED_GUILD)
-    current_guild = ctx.guild
-
     if not primary_guild:
         return await ctx.send("main guild not found")
 
     primary_ids = {m.id for m in primary_guild.members}
-    kicked_count = 0
+    kicked = 0
 
-    for member in current_guild.members:
-        if member.bot or member.id in primary_ids:
-            continue
-        if member.premium_since is not None:
+    for m in ctx.guild.members:
+        if m.bot or m.id in primary_ids or m.premium_since:
             continue
         try:
-            await member.kick(reason="not in main server")
-            kicked_count += 1
+            await m.kick(reason="not in main server")
+            kicked += 1
         except discord.Forbidden:
-            pass
+            continue
 
-    await ctx.send(f"kicked {kicked_count} members not in main server")
+    await ctx.send(f"kicked {kicked} members not in main server")
 
-@bot.event
-async def on_message(message):
-    if message.author.bot:
+@bot.command()
+@has_perms()
+async def active(ctx, sub: str, duration: str = None):
+    global active_race, race_end_time, vc_times, race_leaderboard_message, race_channel
+
+    if sub.lower() == "on" and duration:
+        if active_race:
+            return await ctx.send("race already running")
+        delta = parse_time_string(duration)
+        race_end_time = datetime.utcnow() + delta
+        active_race = True
+        vc_times.clear()
+        race_channel = ctx.channel
+
+        embed = discord.Embed(title="**VC Race Started!**", description="Tracking voice time...", color=discord.Color.green())
+        race_leaderboard_message = await ctx.send(embed=embed)
+        await ctx.send(f"race started for {duration}")
+
+    elif sub.lower() == "off":
+        if not active_race:
+            return await ctx.send("no race running")
+        active_race = False
+        await ctx.send("race ended early")
+
+# --- Background Tasks ---
+
+@tasks.loop(seconds=15)
+async def update_race_leaderboard():
+    if not active_race or not race_leaderboard_message or not race_channel:
         return
 
-    # Auto-reaction
-    if message.author.id in fsb_react_users:
-        try:
-            await message.add_reaction(fsb_react_users[message.author.id])
-        except discord.HTTPException:
-            pass
+    if datetime.utcnow() >= race_end_time:
+        await race_channel.send("race ended")
+        await race_leaderboard_message.edit(embed=discord.Embed(title="**VC Race Ended**", color=discord.Color.red()))
+        global active_race
+        active_race = False
+        return
 
-    if "pic" in message.content.lower():
-        member = message.author
-        guild = message.guild
-        role = discord.utils.get(guild.roles, name=pic_role_name)
+    # Update time for users currently in VC
+    now = datetime.utcnow()
+    for uid, join_time in last_voice_states.items():
+        vc_times[uid] += int((now - join_time).total_seconds())
+        last_voice_states[uid] = now
 
-        has_pic = role in member.roles if role else False
-        is_repping = "/warrant" in (member.activity.name if member.activity else "")
-        is_booster = member.premium_since is not None
-        is_owner = member.id == OWNER_ID
+    sorted_users = sorted(vc_times.items(), key=lambda x: x[1], reverse=True)[:10]
+    desc = ""
+    for i, (uid, seconds) in enumerate(sorted_users, 1):
+        user = bot.get_user(uid)
+        if user:
+            mins = seconds // 60
+            desc += f"**{i}.** {user.mention} — `{mins} min`\n"
 
-        if not (has_pic or is_repping or is_booster or is_owner):
-            await message.channel.send("rep /warrant or boost 4 pic")
-
-    await bot.process_commands(message)
+    embed = discord.Embed(title="**Live VC Leaderboard**", description=desc or "No data yet", color=discord.Color.blurple())
+    await race_leaderboard_message.edit(embed=embed)
 
 @tasks.loop(seconds=20)
 async def check_statuses():
     guild = bot.get_guild(ALLOWED_GUILD)
-    if guild is None:
+    if not guild:
         return
 
     role = discord.utils.get(guild.roles, name=pic_role_name)
@@ -201,13 +295,11 @@ async def check_statuses():
         if is_repping or is_booster:
             if not has_pic:
                 await member.add_roles(role)
-                print(f"Gave pic role to {member.name}")
                 if piclog_channel:
                     await piclog_channel.send(f"{member.mention} thank you for repping /warrant")
         else:
             if has_pic:
                 await member.remove_roles(role)
-                print(f"Removed pic role from {member.name}")
                 if had_rep and piclog_channel:
                     await piclog_channel.send(f"{member.mention} ur pic perms got taken LOL rep /warrant")
 
