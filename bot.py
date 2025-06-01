@@ -46,9 +46,6 @@ def has_perms():
         return ctx.author.id in permitted_users
     return commands.check(predicate)
 
-def good_embed(text="u good"):
-    return discord.Embed(description=f"```\n{text}\n```", color=discord.Color.dark_grey())
-
 @bot.command()
 @has_perms()
 async def autopic(ctx):
@@ -68,27 +65,31 @@ async def autopic(ctx):
             if role in member.roles:
                 await member.remove_roles(role)
 
-    await ctx.send(embed=good_embed())
+    embed = discord.Embed(description="`u good`", color=discord.Color.from_rgb(0,0,0))
+    await ctx.send(embed=embed)
 
 @bot.command()
 @has_perms()
 async def piclog(ctx, channel: discord.TextChannel):
     global piclog_channel
     piclog_channel = channel
-    await ctx.send(embed=good_embed())
+    embed = discord.Embed(description="`u good`", color=discord.Color.from_rgb(0,0,0))
+    await ctx.send(embed=embed)
 
 @bot.command()
 @has_perms()
 async def cmdpermit(ctx, user: discord.Member):
     permitted_users.add(user.id)
-    await ctx.send(embed=good_embed())
+    embed = discord.Embed(description=f"`u good {user.mention}`", color=discord.Color.from_rgb(0,0,0))
+    await ctx.send(embed=embed)
 
 @bot.command()
 @has_perms()
 async def cmdremove(ctx, user: discord.Member):
     if user.id != OWNER_ID:
         permitted_users.discard(user.id)
-        await ctx.send(embed=good_embed())
+        embed = discord.Embed(description=f"`u good {user.mention}`", color=discord.Color.from_rgb(0,0,0))
+        await ctx.send(embed=embed)
 
 @bot.command(name="fsb")
 @has_perms()
@@ -97,10 +98,12 @@ async def fsb(ctx, subcommand: str, user: discord.Member, emoji: str = None):
         if not emoji:
             return await ctx.send("u gotta give an emoji")
         fsb_react_users[user.id] = emoji
-        await ctx.send(embed=good_embed(f"u good {user.mention}"))
+        embed = discord.Embed(description=f"`u good {user.mention}`", color=discord.Color.from_rgb(0,0,0))
+        await ctx.send(embed=embed)
     elif subcommand.lower() == "reset":
         fsb_react_users.pop(user.id, None)
-        await ctx.send(embed=good_embed(f"u good {user.mention}"))
+        embed = discord.Embed(description=f"`u good {user.mention}`", color=discord.Color.from_rgb(0,0,0))
+        await ctx.send(embed=embed)
     else:
         await ctx.send("subcommand not recognized (use react or reset)")
 
@@ -160,6 +163,16 @@ async def masskick(ctx):
             pass
 
     await ctx.send(f"kicked {kicked_count} members not in main server")
+
+@bot.command()
+async def ping(ctx):
+    latency = round(bot.latency * 1000)  # Convert to milliseconds
+    embed = discord.Embed(
+        title="Ping!",
+        description=f"Latency: `{latency}ms`",
+        color=discord.Color.from_rgb(0, 0, 0)  # Black embed
+    )
+    await ctx.send(embed=embed)
 
 @bot.event
 async def on_message(message):
