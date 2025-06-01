@@ -40,13 +40,14 @@ async def on_guild_join(guild):
     if guild.id not in ALLOWED_GUILDS:
         print(f"Leaving guild {guild.name} ({guild.id}) — not in allowed list.")
         await guild.leave()
-    else:
-        print(f"Staying in allowed guild {guild.name} ({guild.id}).")
 
 def has_perms():
     async def predicate(ctx):
         return ctx.author.id in permitted_users
     return commands.check(predicate)
+
+def good_embed(text="u good"):
+    return discord.Embed(description=f"```\n{text}\n```", color=discord.Color.dark_grey())
 
 @bot.command()
 @has_perms()
@@ -67,25 +68,27 @@ async def autopic(ctx):
             if role in member.roles:
                 await member.remove_roles(role)
 
-    await ctx.send("u good")
+    await ctx.send(embed=good_embed())
 
 @bot.command()
 @has_perms()
 async def piclog(ctx, channel: discord.TextChannel):
     global piclog_channel
     piclog_channel = channel
-    await ctx.send("u good")
+    await ctx.send(embed=good_embed())
 
 @bot.command()
 @has_perms()
 async def cmdpermit(ctx, user: discord.Member):
     permitted_users.add(user.id)
+    await ctx.send(embed=good_embed())
 
 @bot.command()
 @has_perms()
 async def cmdremove(ctx, user: discord.Member):
     if user.id != OWNER_ID:
         permitted_users.discard(user.id)
+        await ctx.send(embed=good_embed())
 
 @bot.command(name="fsb")
 @has_perms()
@@ -94,18 +97,18 @@ async def fsb(ctx, subcommand: str, user: discord.Member, emoji: str = None):
         if not emoji:
             return await ctx.send("u gotta give an emoji")
         fsb_react_users[user.id] = emoji
-        await ctx.send(f"u good {user.mention}")
+        await ctx.send(embed=good_embed(f"u good {user.mention}"))
     elif subcommand.lower() == "reset":
         fsb_react_users.pop(user.id, None)
-        await ctx.send(f"u good {user.mention}")
+        await ctx.send(embed=good_embed(f"u good {user.mention}"))
     else:
         await ctx.send("subcommand not recognized (use react or reset)")
 
 @bot.command()
 @has_perms()
 async def check(ctx):
-    if ctx.guild.id not in ALLOWED_GUILDS:
-        return await ctx.send("not in the allowed guild")
+    if ctx.guild.id not in OTHER_ALLOWED_GUILDS:
+        return await ctx.send("This command isn't allowed in this server.")
 
     primary_guild = bot.get_guild(ALLOWED_GUILD)
     current_guild = ctx.guild
@@ -133,8 +136,8 @@ async def check(ctx):
 @bot.command()
 @has_perms()
 async def masskick(ctx):
-    if ctx.guild.id not in ALLOWED_GUILDS:
-        return await ctx.send("not in the allowed guild")
+    if ctx.guild.id not in OTHER_ALLOWED_GUILDS:
+        return await ctx.send("This command isn't allowed in this server.")
 
     primary_guild = bot.get_guild(ALLOWED_GUILD)
     current_guild = ctx.guild
