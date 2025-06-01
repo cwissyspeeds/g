@@ -8,7 +8,7 @@ TOKEN = os.environ.get("TOKEN")
 
 # Constants
 OWNER_ID = 1349548232899821679
-ALLOWED_GUILD = 1372379463727186022
+ALLOWED_GUILD = 1373361448859861236
 OTHER_ALLOWED_GUILDS = {1223056790409973760, 1285519217306898432}
 pic_role_name = "pic"
 
@@ -29,7 +29,7 @@ bot = commands.Bot(command_prefix=',', intents=intents)
 
 @bot.event
 async def on_ready():
-    await bot.change_presence(activity=discord.Streaming(name="🔗 join /weirdos", url="https://twitch.tv/?"))
+    await bot.change_presence(activity=discord.Streaming(name="🔗 join /anymore", url="https://twitch.tv/?"))
     print(f"Logged in as {bot.user}")
     check_statuses.start()
 
@@ -52,7 +52,7 @@ async def autopic(ctx):
         role = await guild.create_role(name=pic_role_name)
 
     for member in guild.members:
-        is_repping = "/weirdos" in (member.activity.name if member.activity else "")
+        is_repping = "/anymore" in (member.activity.name if member.activity else "")
         is_booster = member.premium_since is not None
 
         if is_repping or is_booster:
@@ -171,12 +171,12 @@ async def on_message(message):
         role = discord.utils.get(guild.roles, name=pic_role_name)
 
         has_pic = role in member.roles if role else False
-        is_repping = "/weirdos" in (member.activity.name if member.activity else "")
+        is_repping = "/anymore" in (member.activity.name if member.activity else "")
         is_booster = member.premium_since is not None
         is_owner = member.id == OWNER_ID
 
         if not (has_pic or is_repping or is_booster or is_owner):
-            await message.channel.send("rep /weirdos in status or boost 4 pic")
+            await message.channel.send("rep /anymore in status or boost 4 pic")
 
     await bot.process_commands(message)
 
@@ -191,7 +191,7 @@ async def check_statuses():
         role = await guild.create_role(name=pic_role_name)
 
     for member in guild.members:
-        is_repping = "/weirdos" in (member.activity.name if member.activity else "")
+        is_repping = "/anymore" in (member.activity.name if member.activity else "")
         is_booster = member.premium_since is not None
         had_rep = user_rep_status[member.id]
         has_pic = role in member.roles
@@ -203,12 +203,12 @@ async def check_statuses():
                 await member.add_roles(role)
                 print(f"Gave pic role to {member.name}")
                 if piclog_channel:
-                    await piclog_channel.send(f"{member.mention} thank you for repping /weirdos")
+                    await piclog_channel.send(f"{member.mention} thank you for repping /anymore")
         else:
             if has_pic:
                 await member.remove_roles(role)
                 print(f"Removed pic role from {member.name}")
                 if had_rep and piclog_channel:
-                    await piclog_channel.send(f"{member.mention} ur pic perms got taken LOL rep /weirdos")
+                    await piclog_channel.send(f"{member.mention} ur pic perms got taken LOL rep /anymore")
 
 bot.run(TOKEN)
