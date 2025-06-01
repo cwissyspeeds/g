@@ -3,13 +3,14 @@ from discord.ext import commands, tasks
 import os
 from collections import defaultdict
 
-# ENV token (for Railway)
+# ENV token (for Railway or Replit)
 TOKEN = os.environ.get("TOKEN")
 
 # Constants
 OWNER_ID = 1349548232899821679
 ALLOWED_GUILD = 1373361448859861236
 OTHER_ALLOWED_GUILDS = {1223056790409973760, 1285519217306898432}
+ALLOWED_GUILDS = {ALLOWED_GUILD, *OTHER_ALLOWED_GUILDS}
 pic_role_name = "pic"
 
 # Permissions
@@ -35,8 +36,12 @@ async def on_ready():
 
 @bot.event
 async def on_guild_join(guild):
-    if guild.id not in {ALLOWED_GUILD, *OTHER_ALLOWED_GUILDS}:
+    print(f"Joined guild: {guild.name} ({guild.id})")
+    if guild.id not in ALLOWED_GUILDS:
+        print(f"Leaving guild {guild.name} ({guild.id}) — not in allowed list.")
         await guild.leave()
+    else:
+        print(f"Staying in allowed guild {guild.name} ({guild.id}).")
 
 def has_perms():
     async def predicate(ctx):
@@ -99,7 +104,7 @@ async def fsb(ctx, subcommand: str, user: discord.Member, emoji: str = None):
 @bot.command()
 @has_perms()
 async def check(ctx):
-    if ctx.guild.id not in OTHER_ALLOWED_GUILDS:
+    if ctx.guild.id not in ALLOWED_GUILDS:
         return await ctx.send("not in the allowed guild")
 
     primary_guild = bot.get_guild(ALLOWED_GUILD)
@@ -128,7 +133,7 @@ async def check(ctx):
 @bot.command()
 @has_perms()
 async def masskick(ctx):
-    if ctx.guild.id not in OTHER_ALLOWED_GUILDS:
+    if ctx.guild.id not in ALLOWED_GUILDS:
         return await ctx.send("not in the allowed guild")
 
     primary_guild = bot.get_guild(ALLOWED_GUILD)
