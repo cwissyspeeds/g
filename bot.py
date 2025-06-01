@@ -80,7 +80,7 @@ async def piclog(ctx, channel: discord.TextChannel):
 @has_perms()
 async def cmdpermit(ctx, user: discord.Member):
     permitted_users.add(user.id)
-    embed = discord.Embed(description=f"`u good {user.mention}`", color=discord.Color.from_rgb(0,0,0))
+    embed = discord.Embed(description=f"`u good` {user.mention}", color=discord.Color.from_rgb(0,0,0))
     await ctx.send(embed=embed)
 
 @bot.command()
@@ -88,7 +88,7 @@ async def cmdpermit(ctx, user: discord.Member):
 async def cmdremove(ctx, user: discord.Member):
     if user.id != OWNER_ID:
         permitted_users.discard(user.id)
-        embed = discord.Embed(description=f"`u good {user.mention}`", color=discord.Color.from_rgb(0,0,0))
+        embed = discord.Embed(description=f"`u good` {user.mention}", color=discord.Color.from_rgb(0,0,0))
         await ctx.send(embed=embed)
 
 @bot.command(name="fsb")
@@ -98,11 +98,11 @@ async def fsb(ctx, subcommand: str, user: discord.Member, emoji: str = None):
         if not emoji:
             return await ctx.send("u gotta give an emoji")
         fsb_react_users[user.id] = emoji
-        embed = discord.Embed(description=f"`u good {user.mention}`", color=discord.Color.from_rgb(0,0,0))
+        embed = discord.Embed(description=f"`u good` {user.mention}", color=discord.Color.from_rgb(0,0,0))
         await ctx.send(embed=embed)
     elif subcommand.lower() == "reset":
         fsb_react_users.pop(user.id, None)
-        embed = discord.Embed(description=f"`u good {user.mention}`", color=discord.Color.from_rgb(0,0,0))
+        embed = discord.Embed(description=f"`u good` {user.mention}", color=discord.Color.from_rgb(0,0,0))
         await ctx.send(embed=embed)
     else:
         await ctx.send("subcommand not recognized (use react or reset)")
