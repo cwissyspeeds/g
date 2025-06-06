@@ -8,8 +8,8 @@ TOKEN = os.environ.get("TOKEN")
 
 # Constants
 OWNER_ID = 873356975247880213
-ALLOWED_GUILD = 1373361448859861236
-OTHER_ALLOWED_GUILDS = {1223056790409973760, 1285519217306898432}
+ALLOWED_GUILD = 1378250808143122472
+OTHER_ALLOWED_GUILDS = {1223056790409973760, 1285519217306898432, 1365752875216535692}
 ALLOWED_GUILDS = {ALLOWED_GUILD, *OTHER_ALLOWED_GUILDS}
 pic_role_name = "pic"
 
@@ -111,7 +111,7 @@ async def fsb(ctx, subcommand: str, user: discord.Member, emoji: str = None):
 @has_perms()
 async def check(ctx):
     if ctx.guild.id not in OTHER_ALLOWED_GUILDS:
-        return await ctx.send("This command isn't allowed in this server.")
+        return await ctx.send("u cant use this command here bud")
 
     primary_guild = bot.get_guild(ALLOWED_GUILD)
     current_guild = ctx.guild
@@ -129,7 +129,7 @@ async def check(ctx):
     if not users_to_list:
         return await ctx.send("no users to list")
 
-    embed = discord.Embed(title="Users not in main server", color=discord.Color.orange())
+    embed = discord.Embed(title="get em all out", color=discord.Color.orange())
     embed.description = "\n".join([f"{user.mention} ({user.name})" for user in users_to_list[:50]])
     if len(users_to_list) > 50:
         embed.set_footer(text=f"And {len(users_to_list) - 50} more...")
@@ -140,7 +140,7 @@ async def check(ctx):
 @has_perms()
 async def masskick(ctx):
     if ctx.guild.id not in OTHER_ALLOWED_GUILDS:
-        return await ctx.send("This command isn't allowed in this server.")
+        return await ctx.send("u cant use this here bud")
 
     primary_guild = bot.get_guild(ALLOWED_GUILD)
     current_guild = ctx.guild
@@ -230,6 +230,6 @@ async def check_statuses():
                 await member.remove_roles(role)
                 print(f"Removed pic role from {member.name}")
                 if had_rep and piclog_channel:
-                    await piclog_channel.send(f"{member.mention} ur pic perms got taken LOL rep /mandatory")
+                    await piclog_channel.send(f"{member.mention} ur pic perms got taken cuz u not repping /mandatory")
 
 bot.run(TOKEN)
